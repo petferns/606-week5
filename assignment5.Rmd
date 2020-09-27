@@ -1,0 +1,128 @@
+---
+title: 'DATA 607 Assignment 5: Tidying and Transforming Data'
+author: "Peter"
+date: "9/26/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+```
+
+# Exercise
+
+The chart below describes arrival delays for two airlines across five destinations. Your task is to:
+(1) Create a .CSV file (or optionally, a MySQL database!) that includes all of the information above.
+You’re encouraged to use a “wide” structure similar to how the information appears above, so
+that you can practice tidying and transformations as described below.
+(2) Read the information from your .CSV file into R, and use tidyr and dplyr as needed to tidy
+and transform your data.
+(3) Perform analysis to compare the arrival delays for the two airlines.
+(4) Your code should be in an R Markdown file, posted to rpubs.com, and should include narrative
+descriptions of your data cleanup work, analysis, and conclusions. Please include in your
+homework submission:
+ The URL to the .Rmd file in your GitHub repository. and
+ The URL for your rpubs.com web page.
+
+
+![](1.jpg)
+
+# Solution :
+
+### Read the csv file from GitHub with the table data and replace empty values with NA
+
+```{r}
+csv <- read.csv("https://raw.githubusercontent.com/petferns/607-week5/master/untidy.csv", na.strings = c("", "NA"))
+head(csv)
+```
+
+#### We see a empty row at row number 3, all variables value are NA so we don't need this row, lets neglect it.
+
+```{r}
+csv <- csv[!apply(is.na(csv[1:7]),1,all), ]
+
+```
+
+### Let us rename the 1st and 2nd column 
+
+```{r}
+# Renaming the first column to Airline and second to Status
+names(csv)[1] <- "Airline"
+names(csv)[2] <- "Status"
+head(csv)
+```
+#### We need to replace the NA in row 2 with **ALASKA** and replace NA in row 4 with **AM WEST** assuming the row is for previous Airline
+
+```{r}
+for(i in 2:nrow(csv)) {
+  
+  if(is.na(csv$Airline[i])){
+    csv$Airline[i] <- csv$Airline[i-1]
+  }
+}
+```
+
+#### Let us now apply gather function to make the wide structure to long with key value pair as City and Count.
+
+```{r}
+wide_to_long <- gather(csv, "City", "Count", 3:7)
+head(wide_to_long)
+```
+
+#### Let us now apply spread function on Status column so that each distinct value becomes a column
+
+```{r}
+transformed <- spread(wide_to_long,Status,Count)
+datatable(transformed, extensions = 'Scroller', options = list(scrollY = 200, scroller = TRUE ))
+```
+
+#### Calculate the overall ontime performance and compare over plot
+
+```{r}
+overall_ontime <- transformed %>% group_by(Airline) %>% summarize(avg_ontime = mean(`on time`))
+head(overall_ontime)
+ggplot(overall_ontime ,aes(x= Airline, y=avg_ontime, fill=Airline)) +
+    geom_bar(stat="identity", position=position_dodge())
+
+
+```
+
+#### Calculate the per city ontime performance and comapre over plot
+
+```{r}
+percity_ontime <- transformed %>% group_by(Airline,City) %>% summarize(avg_ontime = mean(`on time`))
+
+ggplot(percity_ontime ,aes(x= City, y=avg_ontime, fill=Airline)) +
+    geom_bar(stat="identity", position=position_dodge())
+```
+
+#### Calculate overall delay and compare over plot
+
+```{r}
+overall_delay <- transformed %>% group_by(Airline) %>% summarize(avg_delay = mean(`delayed`))
+head(overall_delay)
+ggplot(overall_delay ,aes(x= Airline, y=avg_delay, fill=Airline)) +
+    geom_bar(stat="identity", position=position_dodge())
+```
+
+#### Calculate per-city delay and compare over plot
+```{r}
+
+percity_delay <- transformed %>% group_by(Airline,City) %>% summarize(avg_delay = mean(`delayed`))
+head(percity_delay)
+ggplot(percity_delay ,aes(x= City, y=avg_delay, fill=Airline)) +
+    geom_bar(stat="identity", position=position_dodge())
+
+```
+
+####  Conclusion
+
+As per the overall performance graph, we see **AM WEST** has higher ontime flights compared to **ALSAKA** but when we see the same over per city performance, except two cities remaining cities have almost similar performance for both airlines. In city Seattle **ALSAKA** has higher ontime flights then **AM WEST**
+
+When we compare the delay overview, **AM WEST** has higher delayed flights and comparing the ontime graph **AM WEST** has higher ontime flights - which contradicts to itself. This also means that higher ontime flights doesn't guarantee lesser delay.
